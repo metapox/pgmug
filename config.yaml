@@ -1,0 +1,16 @@
+server:
+  bind_address: "0.0.0.0:8080"
+
+database:
+  host: "localhost"
+  port: 5432
+  username: "postgres"
+  password: "password"
+  database: "postgres"
+  max_connections: 10
+
+oidc:
+  issuer_url: "https://your-oidc-provider.com"
+  client_id: "your-client-id"
+  audience: "your-audience"  # Optional, if not set, client_id will be used
+  jwks_cache_duration_seconds: 3600

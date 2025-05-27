@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d testdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-proxy:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      POSTGRES_PROXY_DATABASE__HOST: postgres
+      POSTGRES_PROXY_DATABASE__PORT: 5432
+      POSTGRES_PROXY_DATABASE__USERNAME: testuser
+      POSTGRES_PROXY_DATABASE__PASSWORD: testpass
+      POSTGRES_PROXY_DATABASE__DATABASE: testdb
+      POSTGRES_PROXY_DATABASE__MAX_CONNECTIONS: 10
+      POSTGRES_PROXY_OIDC__ISSUER_URL: https://dev-example.auth0.com/
+      POSTGRES_PROXY_OIDC__CLIENT_ID: your-client-id
+      POSTGRES_PROXY_OIDC__AUDIENCE: your-audience
+      RUST_LOG: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
