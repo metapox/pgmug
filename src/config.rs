@@ -29,16 +29,41 @@ pub struct OidcConfig {
     pub client_id: String,
     pub audience: Option<String>,
     pub jwks_cache_duration_seconds: u64,
+    pub skip_validation: Option<bool>, // 開発環境用
+    pub dev_secret: Option<String>, // 開発環境用のHS256秘密鍵
 }
 
 impl Config {
     pub fn load() -> Result<Self> {
+        println!("Loading configuration...");
+        eprintln!("Loading configuration...");
+        
+        // Load .env file if it exists
+        if let Err(_) = dotenvy::dotenv() {
+            println!("No .env file found, using only environment variables");
+        } else {
+            println!(".env file loaded successfully");
+        }
+        
         let config = config::Config::builder()
             .add_source(config::File::with_name("config.yaml").required(false))
-            .add_source(config::Environment::with_prefix("POSTGRES_PROXY"))
-            .build()?;
-
-        let config: Config = config.try_deserialize()?;
+            .add_source(
+                config::Environment::with_prefix("POSTGRES_PROXY")
+                    .prefix_separator("_")
+                    .separator("__") // 二重アンダースコアを階層セパレーターとして明示的に指定
+                    .try_parsing(true) // 数値や真偽値を自動変換
+            )
+            .build();
+            
+        println!("Config builder result: {:?}", config.is_ok());
+        let config = config?;
+        
+        println!("Attempting to deserialize config...");
+        let config_result = config.try_deserialize::<Config>();
+        println!("Deserialize result: {:?}", config_result.is_ok());
+        let config = config_result?;
+        
+        println!("Configuration loaded successfully");
         Ok(config)
     }
 }
@@ -62,6 +87,8 @@ impl Default for Config {
                 client_id: "your-client-id".to_string(),
                 audience: None,
                 jwks_cache_duration_seconds: 3600,
+                skip_validation: Some(false),
+                dev_secret: None,
             },
         }
     }
@@ -86,6 +113,8 @@ mod tests {
         assert_eq!(config.oidc.client_id, "your-client-id");
         assert_eq!(config.oidc.audience, None);
         assert_eq!(config.oidc.jwks_cache_duration_seconds, 3600);
+        assert_eq!(config.oidc.skip_validation, None);
+        assert_eq!(config.oidc.dev_secret, None);
     }
 
     #[test]
@@ -107,6 +136,8 @@ mod tests {
                 client_id: "test-client".to_string(),
                 audience: Some("test-audience".to_string()),
                 jwks_cache_duration_seconds: 3600,
+                skip_validation: Some(true),
+                dev_secret: Some("test_dev_secret".to_string()),
             },
         };
 
@@ -116,5 +147,7 @@ mod tests {
         assert_eq!(config.oidc.issuer_url, "https://test.auth0.com");
         assert_eq!(config.oidc.client_id, "test-client");
         assert_eq!(config.oidc.audience, Some("test-audience".to_string()));
+        assert_eq!(config.oidc.skip_validation, Some(true));
+        assert_eq!(config.oidc.dev_secret, Some("test_dev_secret".to_string()));
     }
 }

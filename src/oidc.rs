@@ -58,6 +58,9 @@ pub struct OidcValidator {
 
 impl OidcValidator {
     pub async fn new(config: &OidcConfig) -> Result<Self> {
+        println!("Creating OIDC validator...");
+        eprintln!("Creating OIDC validator...");
+        
         let client = reqwest::Client::new();
         
         let validator = Self {
@@ -66,10 +69,21 @@ impl OidcValidator {
             jwks_cache: Arc::new(RwLock::new(None)),
         };
 
-        // Pre-load JWKS
-        validator.fetch_jwks().await?;
-        info!("OIDC validator initialized with issuer: {}", config.issuer_url);
+        // Skip JWKS loading if validation is disabled (for development)
+        if config.skip_validation.unwrap_or(false) {
+            println!("OIDC validation is disabled - running in development mode");
+            info!("OIDC validation is disabled - running in development mode");
+        } else if config.dev_secret.is_some() {
+            println!("Using development secret for JWT validation - skipping JWKS fetch");
+            info!("Using development secret for JWT validation - skipping JWKS fetch");
+        } else {
+            println!("Fetching JWKS from issuer...");
+            // Pre-load JWKS
+            validator.fetch_jwks().await?;
+            info!("OIDC validator initialized with issuer: {}", config.issuer_url);
+        }
 
+        println!("OIDC validator created successfully");
         Ok(validator)
     }
 
@@ -137,6 +151,38 @@ impl OidcValidator {
     }
 
     pub async fn validate_token(&self, token: &str) -> Result<Claims> {
+        // Skip validation if disabled (for development)
+        if self.config.skip_validation.unwrap_or(false) {
+            info!("Token validation skipped - development mode");
+            return Ok(Claims {
+                sub: "dev-user".to_string(),
+                iss: "dev-issuer".to_string(),
+                aud: None,
+                exp: 9999999999, // Far future
+                iat: 1000000000,
+                other: HashMap::new(),
+            });
+        }
+
+        // Check if we have a development secret for HS256 validation
+        if let Some(dev_secret) = &self.config.dev_secret {
+            info!("Using development secret for JWT validation");
+            
+            let decoding_key = DecodingKey::from_secret(dev_secret.as_ref());
+            let mut validation = Validation::new(Algorithm::HS256);
+            validation.set_issuer(&[&self.config.issuer_url]);
+            
+            if let Some(audience) = &self.config.audience {
+                validation.set_audience(&[audience]);
+            } else if !self.config.client_id.is_empty() {
+                validation.set_audience(&[&self.config.client_id]);
+            }
+
+            // Decode and validate token
+            let token_data = decode::<Claims>(token, &decoding_key, &validation)?;
+            return Ok(token_data.claims);
+        }
+
         // Decode header to get kid
         let header = decode_header(token)?;
         let kid = header.kid.as_deref();
@@ -176,6 +222,12 @@ pub async fn auth_middleware(
 ) -> Result<Response, StatusCode> {
     // Skip authentication for health check
     if request.uri().path() == "/health" {
+        return Ok(next.run(request).await);
+    }
+
+    // Skip authentication if validation is disabled (for development)
+    if state.oidc_validator.config.skip_validation.unwrap_or(false) {
+        info!("Authentication skipped - development mode");
         return Ok(next.run(request).await);
     }
 

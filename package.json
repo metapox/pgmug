@@ -1,0 +1,11 @@
+{
+  "name": "postgres-oidc-proxy-dev-tools",
+  "version": "1.0.0",
+  "description": "Development tools for PostgreSQL OIDC Proxy",
+  "scripts": {
+    "generate-jwt": "node scripts/generate_jwt.js"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  }
+}

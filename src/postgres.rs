@@ -14,11 +14,17 @@ pub struct PostgresPool {
 
 impl PostgresPool {
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
+        println!("Creating PostgreSQL connection pool...");
+        eprintln!("Creating PostgreSQL connection pool...");
+        
         // Test connection
         let connection_string = format!(
             "host={} port={} user={} password={} dbname={}",
             config.host, config.port, config.username, config.password, config.database
         );
+
+        println!("Connecting to database: host={} port={} user={} dbname={}", 
+                config.host, config.port, config.username, config.database);
 
         let (client, connection) = tokio_postgres::connect(&connection_string, NoTls).await?;
 
@@ -30,7 +36,9 @@ impl PostgresPool {
         });
 
         // Test the connection
+        println!("Testing database connection...");
         client.simple_query("SELECT 1").await?;
+        println!("Database connection test successful");
         info!("Database connection test successful");
 
         Ok(Self {

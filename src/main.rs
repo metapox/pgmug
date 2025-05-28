@@ -137,20 +137,60 @@ async fn execute_mutation(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Add early debugging output
+    println!("=== Application starting... ===");
+    eprintln!("=== Application starting (stderr)... ===");
+    
+    // Set panic hook for debugging
+    std::panic::set_hook(Box::new(|panic_info| {
+        eprintln!("PANIC: {}", panic_info);
+        if let Some(location) = panic_info.location() {
+            eprintln!("PANIC LOCATION: {}:{}:{}", location.file(), location.line(), location.column());
+        }
+    }));
+    
     // Initialize tracing
+    println!("Initializing tracing...");
     tracing_subscriber::fmt::init();
+    
+    println!("Tracing initialized");
+    info!("Starting PostgreSQL OIDC Proxy");
 
     // Load configuration
-    let config = Config::load()?;
-    info!("Configuration loaded successfully");
+    let config = match Config::load() {
+        Ok(config) => {
+            info!("Configuration loaded successfully");
+            config
+        }
+        Err(e) => {
+            eprintln!("Failed to load configuration: {}", e);
+            return Err(e);
+        }
+    };
 
     // Initialize OIDC validator
-    let oidc_validator = Arc::new(OidcValidator::new(&config.oidc).await?);
-    info!("OIDC validator initialized");
+    let oidc_validator = match OidcValidator::new(&config.oidc).await {
+        Ok(validator) => {
+            info!("OIDC validator initialized");
+            Arc::new(validator)
+        }
+        Err(e) => {
+            eprintln!("Failed to initialize OIDC validator: {}", e);
+            return Err(e);
+        }
+    };
 
     // Initialize PostgreSQL pool
-    let postgres_pool = PostgresPool::new(&config.database).await?;
-    info!("PostgreSQL connection pool initialized");
+    let postgres_pool = match PostgresPool::new(&config.database).await {
+        Ok(pool) => {
+            info!("PostgreSQL connection pool initialized");
+            pool
+        }
+        Err(e) => {
+            eprintln!("Failed to initialize PostgreSQL pool: {}", e);
+            return Err(e);
+        }
+    };
 
     let app_state = AppState {
         postgres_pool,
@@ -169,10 +209,22 @@ async fn main() -> Result<()> {
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind(&config.server.bind_address).await?;
-    info!("Server starting on {}", config.server.bind_address);
+    let listener = match tokio::net::TcpListener::bind(&config.server.bind_address).await {
+        Ok(listener) => {
+            info!("Server starting on {}", config.server.bind_address);
+            listener
+        }
+        Err(e) => {
+            eprintln!("Failed to bind to address {}: {}", config.server.bind_address, e);
+            return Err(e.into());
+        }
+    };
 
-    axum::serve(listener, app).await?;
+    info!("Server is ready to accept connections");
+    if let Err(e) = axum::serve(listener, app).await {
+        eprintln!("Server error: {}", e);
+        return Err(e.into());
+    }
 
     Ok(())
 }

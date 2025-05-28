@@ -14,3 +14,4 @@ oidc:
   client_id: "your-client-id"
   audience: "your-audience"  # Optional, if not set, client_id will be used
   jwks_cache_duration_seconds: 3600
+  skip_validation: true  # Enable for development

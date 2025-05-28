@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.80-bullseye as builder
+FROM rust:1.82-bullseye as builder
 
 WORKDIR /app
 
@@ -25,6 +25,7 @@ FROM debian:bullseye-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl1.1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user
